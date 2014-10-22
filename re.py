@@ -10,6 +10,8 @@ import sys
 import textwrap
 import html.parser 
 
+from subprocess import call
+
 class State:
 	running = True
 
@@ -25,7 +27,7 @@ class State:
 	headers = { 'User-Agent' : 'reddit reader by /u/-colin-' }
 
 	preferred = [
-		'all', 'linux', 'ubuntu', 'europe', 'romania', 'technology', 'programming', 'worldnews', 'games', 'formula1', 'bicycling'
+		'all', 'linux', 'ubuntu', 'europe', 'romania', 'technology', 'programming', 'games', 'formula1', 'bicycling', 'raspberry_pi', 'hearthstone', 'worldnews'
 	]
 
 	def setDimensions (dimensions):
@@ -38,6 +40,7 @@ class Article:
 		self.score = json['data']['score']
 		self.permalink = json['data']['permalink']
 		self.body = json['data'].get('selftext', "None")
+		self.link = json['data'].get('url', "None")
 
 class Comment:
 	def __init__(self, json):
@@ -83,7 +86,7 @@ class SubredditPage:
 		
 		while (line < len(self.articles) and line < maxLines):
 			article = self.articles[line]
-			text = "[%s] %s" % (str(article.score).rjust(4), article.title)
+			text = "[%s] %s" % (str(article.score).rjust(4), article.title.encode('utf-8').decode('ascii', 'ignore'))
 
 			if(self.selectedArticle == line):
 				State.screen.addstr(line - self.lineIndex, 0, text[:State.columns - 1], curses.A_STANDOUT)
@@ -99,7 +102,7 @@ class SubredditPage:
 
 		obj = json.loads(
 			urllib.request.urlopen(
-				urllib.request.Request("http://www.reddit.com/r/%s/%s.json" % (self.subreddit, self.order), None, State.headers)
+				urllib.request.Request("http://www.reddit.com/r/%s/%s.json?limit=100" % (self.subreddit, self.order), None, State.headers)
 			).read().decode('utf-8')
 		)
 
@@ -189,8 +192,9 @@ class CommentPage:
 		self.loadComments()
 
 	def buildRenderer(self):
-		text = "%s\n%s\n%s" % (
-			self.article.title,
+		text = "  URL: %s\n\n%s\n%s\n%s" % (
+			self.article.link,
+			self.article.title.encode('utf-8').decode('ascii', 'ignore'),
 			''.join(['-' for i in range (0, State.columns - 1)]),
 			self.article.body
 		)
@@ -228,6 +232,10 @@ class CommentPage:
 		self.order = 'hot'
 		self.render()
 
+	def openUrl(self):
+		call(['google-chrome', self.article.link])
+
+
 	def command(self, keyCode):
 		def doNothing():
 			pass	
@@ -240,7 +248,8 @@ class CommentPage:
 
 			ord('t') : self.showTop,
 			ord('n') : self.showNew,
-			ord('h') : self.showHot
+			ord('h') : self.showHot,
+			ord('o') : self.openUrl
 		}.get(keyCode, doNothing)()
 		pass
 
@@ -319,7 +328,7 @@ class StringPage:
 		self.lines = [
 			line
 			for paragraph in self.text.split('\n')
-			for line in textwrap.wrap(paragraph, State.columns - 1)
+			for line in textwrap.wrap(paragraph, State.columns - 1) + ['\n']
 		]
 
 	def scrollUp(self):
@@ -335,7 +344,10 @@ class StringPage:
 		lineIndex = 0
 
 		for line in self.lines[self.lineIndex: self.lineIndex + State.rows]:
-			State.screen.addstr(lineIndex, 0, line)
+			try:
+				State.screen.addstr(lineIndex, 0, line)
+			except:
+				pass
 			lineIndex += 1
 			
 
